@@ -11,6 +11,6 @@
   },
   "devDependencies": {
     "rollup-plugin-string": "^3.0.0",
-    "vite": "^2.2.4"
+    "vite": "^7.3.1"
   }
 }

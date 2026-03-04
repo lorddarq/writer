@@ -4,6 +4,15 @@ export const editor = {
   drawing: { scroll: 0, scrollbar: { opacity: 0 } },
   scroll: 0,
   rolloverScroll: 0,
+  fileName: 'Untitled.txt',
+  mode: 'plain',
+  largeFileMode: false,
+  find: {
+    visible: false,
+    query: '',
+    matches: [],
+    activeIndex: -1,
+  },
   /** @type {import('./cursor').default[]} */
   cursors: [],
   /** @type {import('./buffer').default} */
@@ -22,6 +31,12 @@ export const elements = {
   lines: null,
   decorations: null,
   textarea: null,
+  status: null,
+  statusText: null,
+  statusMode: null,
+  find: null,
+  findInput: null,
+  findCount: null,
   scrollbar: null,
   scrollbarThumb: null,
   dumpButton: null,
@@ -32,8 +47,7 @@ export const settings = proxy({
     color: '#e5e5e5',
     lineHeight: 28,
     fontSize: 16,
-    // font: 'Inter'
-    font: 'iA Writer Mono V, Menlo, monospace',
+    font: "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
   },
   cursor: {
     width: 4,

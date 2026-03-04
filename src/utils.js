@@ -24,23 +24,25 @@ export function swapLine(change) {
   // No change provided
   if (change == null) return
 
-  const { cursors, buffer } = editor
+  transact(() => {
+    const { cursors, buffer } = editor
 
-  cursors.forEach((cursor) => {
-    if (cursor.selection.isCollapsed) {
-      const { line, column } = cursor.position
+    cursors.forEach((cursor) => {
+      if (cursor.selection.isCollapsed) {
+        const { line, column } = cursor.position
 
-      if (buffer.swapLine(line, change)) {
-        cursor.moveTo(line + change, column)
+        if (buffer.swapLine(line, change)) {
+          cursor.moveTo(line + change, column)
+        }
+      } else {
+        const { start, end } = cursor.selection
+        buffer.swapLines(start.line, end.line, change)
+        cursor.moveSelection(
+          new Point(start.line + change, start.column),
+          new Point(end.line + change, end.column)
+        )
       }
-    } else {
-      const { start, end } = cursor.selection
-      buffer.swapLines(start.line, end.line, change)
-      cursor.moveSelection(
-        new Point(start.line + change, start.column),
-        new Point(end.line + change, end.column)
-      )
-    }
+    })
   })
 }
 
@@ -64,83 +66,90 @@ export function copy() {
 }
 
 export function cut() {
-  const { cursors } = editor
+  transact(() => {
+    const { cursors } = editor
 
-  // Copy, then delete
-  copy()
-  cursors.forEach((cursor) => {
-    cursor.deleteSelection()
+    // Copy, then delete
+    copy()
+    cursors.forEach((cursor) => {
+      cursor.deleteSelection()
+    })
   })
 }
 
 export function insertText(text) {
-  const { cursors, buffer } = editor
+  transact(() => {
+    const { cursors, buffer } = editor
 
-  cursors.forEach((cursor) => {
-    cursor.deleteSelection()
-    const { line, column } = cursor.position
-    buffer.insert(line, column, text)
-    buffer.wrapLine(line)
-    cursor.moveRight(text.length)
+    cursors.forEach((cursor) => {
+      cursor.deleteSelection()
+      const { line, column } = cursor.position
+      buffer.insert(line, column, text)
+      cursor.moveRight(text.length)
+    })
   })
 }
 
 export function deleteToStartOfLine() {
-  const { cursors, buffer } = editor
-  cursors.forEach((cursor) => {
-    const { line, column } = cursor.position
+  transact(() => {
+    const { cursors, buffer } = editor
+    cursors.forEach((cursor) => {
+      const { line, column } = cursor.position
 
-    if (column === 0) {
-      cursor.moveLeft()
-      removeLine(line)
-    } else {
-      buffer.delete(line, column, -column)
-      buffer.wrapLine(line)
-      cursor.moveToStartOfLine()
-    }
-  })
-}
-
-export function deleteToStartOfWord() {
-  const { cursors } = editor
-  cursors.forEach((cursor) => {
-    if (!cursor.selection.isCollapsed) {
-      cursor.deleteSelection()
-      return
-    }
-
-    const { line, column } = cursor.position
-
-    if (column === 0) {
-      cursor.moveLeft()
-      removeLine(line)
-    } else {
-      const current = cursor.selection.focus
-      cursor.moveToStartOfWord()
-      cursor.moveWithSelect(current, true)
-      cursor.deleteSelection()
-    }
-  })
-}
-
-export function backspace() {
-  const { cursors, buffer } = editor
-
-  cursors.forEach((cursor) => {
-    const { line, column } = cursor.position
-
-    if (cursor.selection.isCollapsed) {
       if (column === 0) {
         cursor.moveLeft()
         removeLine(line)
       } else {
-        buffer.delete(line, column, -1)
-        buffer.wrapLine(line)
-        cursor.moveLeft()
+        buffer.delete(line, column, -column)
+        cursor.moveToStartOfLine()
       }
-    } else {
-      cursor.deleteSelection()
-    }
+    })
+  })
+}
+
+export function deleteToStartOfWord() {
+  transact(() => {
+    const { cursors } = editor
+    cursors.forEach((cursor) => {
+      if (!cursor.selection.isCollapsed) {
+        cursor.deleteSelection()
+        return
+      }
+
+      const { line, column } = cursor.position
+
+      if (column === 0) {
+        cursor.moveLeft()
+        removeLine(line)
+      } else {
+        const current = cursor.selection.focus
+        cursor.moveToStartOfWord()
+        cursor.moveWithSelect(current, true)
+        cursor.deleteSelection()
+      }
+    })
+  })
+}
+
+export function backspace() {
+  transact(() => {
+    const { cursors, buffer } = editor
+
+    cursors.forEach((cursor) => {
+      const { line, column } = cursor.position
+
+      if (cursor.selection.isCollapsed) {
+        if (column === 0) {
+          cursor.moveLeft()
+          removeLine(line)
+        } else {
+          buffer.delete(line, column, -1)
+          cursor.moveLeft()
+        }
+      } else {
+        cursor.deleteSelection()
+      }
+    })
   })
 }
 
@@ -177,13 +186,23 @@ export function getSelectionText(selection) {
   }
 }
 
-export function newline() {
-  const { cursors, buffer } = editor
+export function newline(mode = 'plain') {
+  transact(() => {
+    const { cursors, buffer } = editor
 
-  cursors.forEach((cursor) => {
-    const { line, column } = cursor.position
-    buffer.splitDown(line, column)
-    cursor.startOfNextLine()
+    cursors.forEach((cursor) => {
+      const { line, column } = cursor.position
+      const current = buffer.getLineContent(line) || ''
+      const indent = mode === 'plain' ? '' : (current.match(/^\s+/)?.[0] ?? '')
+      buffer.splitDown(line, column)
+      if (indent) {
+        buffer.insert(line + 1, 0, indent)
+      }
+      cursor.startOfNextLine()
+      if (indent) {
+        cursor.moveRight(indent.length)
+      }
+    })
   })
 }
 
@@ -191,6 +210,89 @@ export function removeLine(line) {
   if (line === 0) return
   const { buffer } = editor
   buffer.splitUp(line)
+}
+
+export function tab(outdent = false) {
+  transact(() => {
+    const { cursors, buffer } = editor
+    const indentUnit = '  '
+
+    cursors.forEach((cursor) => {
+      if (cursor.selection.isCollapsed) {
+        const { line, column } = cursor.position
+        const lineText = buffer.getLineContent(line) || ''
+
+        if (outdent) {
+          if (lineText.startsWith('\t')) {
+            buffer.delete(line, 1, -1)
+            cursor.moveTo(line, Math.max(0, column - 1))
+          } else if (lineText.startsWith(indentUnit)) {
+            buffer.delete(line, indentUnit.length, -indentUnit.length)
+            cursor.moveTo(line, Math.max(0, column - indentUnit.length))
+          }
+        } else {
+          buffer.insert(line, column, indentUnit)
+          cursor.moveRight(indentUnit.length)
+        }
+        return
+      }
+
+      const { start, end } = cursor.selection
+      for (let line = start.line; line <= end.line; line++) {
+        const lineText = buffer.getLineContent(line) || ''
+        if (outdent) {
+          if (lineText.startsWith('\t')) {
+            buffer.delete(line, 1, -1)
+          } else if (lineText.startsWith(indentUnit)) {
+            buffer.delete(line, indentUnit.length, -indentUnit.length)
+          }
+        } else {
+          buffer.insert(line, 0, indentUnit)
+        }
+      }
+
+      const endColumn = buffer.getLineContent(end.line).length
+      cursor.moveSelection(new Point(start.line, 0), new Point(end.line, endColumn))
+    })
+  })
+}
+
+export function undo() {
+  if (!editor.buffer.undo()) {
+    return false
+  }
+
+  clampCursors()
+  return true
+}
+
+export function redo() {
+  if (!editor.buffer.redo()) {
+    return false
+  }
+
+  clampCursors()
+  return true
+}
+
+function clampCursors() {
+  const maxLine = getLastLineNumber()
+
+  editor.cursors.forEach((cursor) => {
+    const clampedLine = clamp(0, maxLine, cursor.position.line)
+    const lineLength = editor.buffer.getLineContent(clampedLine).length
+    const clampedColumn = clamp(0, lineLength, cursor.position.column)
+    cursor.moveTo(clampedLine, clampedColumn)
+  })
+}
+
+function transact(fn) {
+  editor.buffer.beginTransaction()
+  try {
+    fn()
+  } finally {
+    editor.buffer.endTransaction()
+  }
 }
 
 /** Cursor Operations */

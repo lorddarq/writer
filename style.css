@@ -5,6 +5,8 @@
 :root {
   --fg: #e5e5e5;
   --bg: #1d1d1d;
+  --font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Helvetica, Arial, sans-serif;
 }
 
 html,
@@ -27,6 +29,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--fg);
+  font-family: var(--font-family);
 }
 
 body,
@@ -53,6 +56,7 @@ main {
 
 [writer-editor] {
   position: relative;
+  isolation: isolate;
   max-height: 100vh;
   overflow: hidden;
   width: 100%;
@@ -63,6 +67,7 @@ main {
 
 [writer-wrapper] {
   position: absolute;
+  z-index: 1;
   contain: strict;
   width: 1e6px;
   height: 1e6px;
@@ -82,6 +87,10 @@ main {
   width: 100%;
   position: absolute;
   min-height: var(--text-line-height);
+}
+
+[writer-line].writer-line-current {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 [writer-decoration] {
@@ -125,6 +134,7 @@ main {
 
 [writer-scrollbar] {
   position: absolute;
+  z-index: 5;
   right: 0;
   top: 0;
   bottom: 0;
@@ -145,4 +155,134 @@ main {
 
 [writer-scrollbar-thumb]:active {
   background: var(--scrollbar-active-color);
+}
+
+[writer-status] {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(229, 229, 229, 0.62);
+  background: linear-gradient(
+    to top,
+    rgba(29, 29, 29, 0.95),
+    rgba(29, 29, 29, 0.6) 70%,
+    rgba(29, 29, 29, 0)
+  );
+  pointer-events: auto;
+  user-select: none;
+}
+
+[writer-status-text] {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+[writer-status-mode] {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 21;
+  color: rgba(229, 229, 229, 0.72);
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: 4px;
+  padding: 0.1rem 0.25rem;
+  font: inherit;
+}
+
+[writer-status-mode]:focus {
+  outline: none;
+  border-color: rgba(200, 200, 200, 0.85);
+}
+
+[writer-find] {
+  position: absolute;
+  z-index: 30;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  border-radius: 8px;
+  background: rgba(29, 29, 29, 0.88);
+  border: 1px solid rgba(127, 127, 127, 0.45);
+}
+
+[writer-find][data-visible='true'] {
+  display: flex;
+}
+
+[writer-find-input] {
+  width: 12rem;
+  color: var(--fg);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(127, 127, 127, 0.45);
+  border-radius: 5px;
+  padding: 0.2rem 0.35rem;
+  font: inherit;
+}
+
+[writer-find-input]:focus {
+  outline: none;
+  border-color: rgba(180, 180, 180, 0.9);
+}
+
+[writer-find-count] {
+  min-width: 3.4rem;
+  text-align: right;
+  font-size: 12px;
+  color: rgba(229, 229, 229, 0.7);
+}
+
+[writer-find-match] {
+  background: rgba(207, 175, 80, 0.33);
+}
+
+.writer-token-keyword {
+  color: rgba(160, 198, 255, 0.92);
+}
+
+.writer-token-string {
+  color: rgba(161, 225, 180, 0.9);
+}
+
+.writer-token-number {
+  color: rgba(242, 204, 145, 0.9);
+}
+
+.writer-token-comment {
+  color: rgba(150, 150, 150, 0.8);
+}
+
+.writer-token-punct {
+  color: rgba(208, 208, 208, 0.85);
+}
+
+.writer-token-heading {
+  color: rgba(179, 217, 255, 0.96);
+  font-weight: 600;
+}
+
+.writer-token-emphasis {
+  color: rgba(229, 229, 229, 0.92);
+  font-style: italic;
+}
+
+.writer-token-code {
+  color: rgba(239, 206, 145, 0.9);
+}
+
+.writer-bracket-match {
+  background: rgba(109, 166, 255, 0.2);
+  border-radius: 2px;
 }

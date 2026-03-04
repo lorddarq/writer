@@ -70,6 +70,116 @@ export default class Buffer {
     /** @type {File | null} */
     this.file = null
     this.lineLimit = 5000
+
+    this.history = []
+    this.historyIndex = -1
+    this.savedHistoryIndex = -1
+    this.maxHistoryEntries = 200
+    this.transactionDepth = 0
+    this.hasPendingChange = false
+    this.isRestoring = false
+  }
+
+  beginTransaction() {
+    this.transactionDepth++
+  }
+
+  endTransaction() {
+    this.transactionDepth = Math.max(0, this.transactionDepth - 1)
+    if (this.transactionDepth === 0 && this.hasPendingChange) {
+      this.hasPendingChange = false
+      this.pushHistory()
+    }
+  }
+
+  markSaved() {
+    this.savedHistoryIndex = this.historyIndex
+  }
+
+  resetHistory() {
+    this.history = []
+    this.historyIndex = -1
+    this.savedHistoryIndex = -1
+    this.pushHistory()
+    this.markSaved()
+  }
+
+  isDirty() {
+    return this.historyIndex !== this.savedHistoryIndex
+  }
+
+  undo() {
+    if (this.historyIndex <= 0) {
+      return false
+    }
+
+    this.historyIndex--
+    this.restoreFromHistory()
+    return true
+  }
+
+  redo() {
+    if (this.historyIndex >= this.history.length - 1) {
+      return false
+    }
+
+    this.historyIndex++
+    this.restoreFromHistory()
+    return true
+  }
+
+  restoreFromHistory() {
+    const snapshot = this.history[this.historyIndex]
+    if (snapshot == null) {
+      return
+    }
+
+    this.isRestoring = true
+    this.loadText(snapshot, true)
+    this.wrapAllLineBuffersSync()
+    this.isRestoring = false
+  }
+
+  pushHistory() {
+    if (this.isRestoring) {
+      return
+    }
+
+    const text = this.toString()
+    const current = this.history[this.historyIndex]
+
+    if (current === text) {
+      return
+    }
+
+    if (this.historyIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.historyIndex + 1)
+    }
+
+    this.history.push(text)
+    this.historyIndex = this.history.length - 1
+
+    if (this.history.length > this.maxHistoryEntries) {
+      const overflow = this.history.length - this.maxHistoryEntries
+      this.history.splice(0, overflow)
+      this.historyIndex = Math.max(0, this.historyIndex - overflow)
+      if (this.savedHistoryIndex >= 0) {
+        this.savedHistoryIndex = Math.max(0, this.savedHistoryIndex - overflow)
+      }
+    }
+  }
+
+  changed() {
+    if (this.isRestoring) {
+      return
+    }
+
+    if (this.transactionDepth > 0) {
+      this.hasPendingChange = true
+      return
+    }
+
+    this.pushHistory()
   }
 
   wrapLine(lineNumber) {
@@ -144,7 +254,13 @@ export default class Buffer {
     })
   }
 
-  loadText(text) {
+  loadText(text, replace = false) {
+    if (replace) {
+      this.lineBuffers = []
+      this.length = 0
+      this.screenLength = 0
+    }
+
     const lines = text.split(Rnewline)
 
     for (let i = 0; i < lines.length; i += this.lineLimit) {
@@ -304,6 +420,7 @@ export default class Buffer {
 
     buffer.wrapLine(idx)
     this.recalculateScreenLength()
+    this.changed()
   }
 
   /** Append {text} to the end of {line} */
@@ -313,10 +430,16 @@ export default class Buffer {
 
   /** Append {text} as a new line at the end of the file */
   appendLine(text) {
-    const lastBuffer = utils.last(this.lineBuffers)
+    let lastBuffer = utils.last(this.lineBuffers)
+    if (!lastBuffer) {
+      const buffer = new LineBuffer([], this.getLineBreak)
+      this.lineBuffers.push(buffer)
+      lastBuffer = buffer
+    }
     lastBuffer.append(text)
     this.length++
     this.recalculateScreenLength()
+    this.changed()
     return [lastBuffer, lastBuffer.lines.length]
   }
 
@@ -333,6 +456,7 @@ export default class Buffer {
     buffer.insert(idx, text)
     this.length++
     this.recalculateScreenLength()
+    this.changed()
     return [buffer, idx + 1]
   }
 
@@ -346,6 +470,7 @@ export default class Buffer {
     const deleted = buffer.remove(idx)
     this.length--
     this.recalculateScreenLength()
+    this.changed()
     return deleted
   }
 
@@ -386,6 +511,9 @@ export default class Buffer {
     // const deleted = original.substr(column, change)
     const modified = original.slice(0, column + change) + original.slice(column)
     buffer.lines[idx] = modified
+    buffer.wrapLine(idx)
+    this.recalculateScreenLength()
+    this.changed()
     // return deleted
   }
 
@@ -398,24 +526,27 @@ export default class Buffer {
 
     buffer.lines[idx] = before
     this.insertLine(line + 1, after)
+    buffer.wrapLine(idx)
+    this.recalculateScreenLength()
+    this.changed()
   }
 
   splitUp(line) {
     if (line === 0) return
     const text = this.removeLine(line)
     this.append(line - 1, text)
+    this.changed()
   }
 
   toString() {
-    let str = ''
+    const lines = []
 
     for (const buffer of this.lineBuffers) {
-      for (const line of buffer) {
-        str += line
-        str += '\n'
+      for (const line of buffer.lines) {
+        lines.push(line)
       }
     }
 
-    return str
+    return lines.join('\n')
   }
 }
